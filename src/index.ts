@@ -1,22 +1,18 @@
 import { ColumnNode, ColumnUpdateNode, InsertQueryNode, KyselyPlugin, ListNodeItem, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueExpressionNode, ValueNode, ValuesItemNode } from "kysely"
 import { callOrGet, ValueOrFactory } from "value-or-factory"
 
-type TableMatcher = string | string[] | "*" | RegExp | ((table: string) => boolean)
-type TableColumn = [InsertFactory] | [InsertFactory, UpdateFactory] | { insert?: InsertFactory, update?: UpdateFactory, always?: UpdateFactory }
-type Primitive = number | string | boolean | bigint | null
-type NodeValue = ListNodeItem & ValueExpressionNode
-type NodeValueFactory<Q> = ValueOrFactory<NodeValue | Primitive, [Q]>
-type InsertFactory = NodeValueFactory<InsertQueryNode>
-type UpdateFactory = NodeValueFactory<InsertQueryNode | UpdateQueryNode>
+export type DefaultTable = { table: DefaultMatcher, columns: Record<string, DefaultColumn> }
+export type DefaultMatcher = string | string[] | "*" | RegExp | ((table: string) => boolean)
+export type DefaultColumn = [InsertDefault] | [InsertDefault, UpdateDefault] | { insert?: InsertDefault, update?: UpdateDefault, always?: UpdateDefault }
+export type DefaultPrimitive = number | string | boolean | bigint | null
+export type DefaultNode = ListNodeItem & ValueExpressionNode
+export type DefaultValue<Q> = ValueOrFactory<DefaultNode | DefaultPrimitive, [Q]>
+export type InsertDefault = DefaultValue<InsertQueryNode>
+export type UpdateDefault = DefaultValue<InsertQueryNode | UpdateQueryNode>
 
 export type DefaultsPluginOptions = {
-    specs: DefaultSpec[]
+    tables: DefaultTable[]
     throwOnUnsupported?: boolean
-}
-
-export type DefaultSpec = {
-    table: TableMatcher
-    columns: Record<string, TableColumn>
 }
 
 export default class DefaultsPlugin implements KyselyPlugin {
@@ -24,9 +20,9 @@ export default class DefaultsPlugin implements KyselyPlugin {
     private readonly transformers
 
     constructor(options: DefaultsPluginOptions) {
-        this.transformers = options.specs.map(spec => {
+        this.transformers = options.tables.map(table => {
             return new DefaultsTransformer({
-                spec,
+                table,
                 throwOnUnsupported: options.throwOnUnsupported,
             })
         })
@@ -42,7 +38,7 @@ export default class DefaultsPlugin implements KyselyPlugin {
 }
 
 type DefaultsTransformerOptions = {
-    spec: DefaultSpec
+    table: DefaultTable
     throwOnUnsupported?: boolean
 }
 
@@ -52,7 +48,7 @@ class DefaultsTransformer extends OperationNodeTransformer {
         super()
     }
 
-    private valueToNode<Q>(factory: NodeValueFactory<Q>, node: Q): NodeValue {
+    private valueToNode<Q>(factory: DefaultValue<Q>, node: Q): DefaultNode {
         const value = callOrGet(factory, node)
         if (typeof value === "object" && value !== null) {
             return value
@@ -63,7 +59,7 @@ class DefaultsTransformer extends OperationNodeTransformer {
         }
     }
     private insertValues(node: InsertQueryNode) {
-        return Object.entries(this.options.spec.columns).flatMap(([key, config]) => {
+        return Object.entries(this.options.table.columns).flatMap(([key, config]) => {
             if (Array.isArray(config)) {
                 if (config[0] === undefined) {
                     return []
@@ -78,7 +74,7 @@ class DefaultsTransformer extends OperationNodeTransformer {
         })
     }
     private updateValues(node: InsertQueryNode | UpdateQueryNode) {
-        return Object.entries(this.options.spec.columns).flatMap(([key, config]) => {
+        return Object.entries(this.options.table.columns).flatMap(([key, config]) => {
             if (Array.isArray(config)) {
                 if (config[1] === undefined) {
                     return []
@@ -93,20 +89,20 @@ class DefaultsTransformer extends OperationNodeTransformer {
         })
     }
     private includeTable(name: string) {
-        if (this.options.spec.table === undefined) {
+        if (this.options.table.table === undefined) {
             return true
         }
-        else if (typeof this.options.spec.table === "string") {
-            return this.options.spec.table === name || this.options.spec.table === "*"
+        else if (typeof this.options.table.table === "string") {
+            return this.options.table.table === name || this.options.table.table === "*"
         }
-        else if (this.options.spec.table instanceof RegExp) {
-            return this.options.spec.table.test(name)
+        else if (this.options.table.table instanceof RegExp) {
+            return this.options.table.table.test(name)
         }
-        else if (typeof this.options.spec.table === "function") {
-            return this.options.spec.table(name)
+        else if (typeof this.options.table.table === "function") {
+            return this.options.table.table(name)
         }
         else {
-            return this.options.spec.table.indexOf(name) !== -1
+            return this.options.table.table.indexOf(name) !== -1
         }
     }
 

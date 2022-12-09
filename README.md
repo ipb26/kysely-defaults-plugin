@@ -14,7 +14,6 @@ npm install kysely-defaults-plugin
 
 const companyId = 1
 const userId = 1
-const dateNow: RawNode = { kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }
 const plugin = new KyselyDefaultsPlugin({
     specs: [
         {
@@ -23,8 +22,8 @@ const plugin = new KyselyDefaultsPlugin({
                 companyId: [companyId],
                 createdById: [userId],
                 updatedById: [userId, userId],
-                createdOn: [dateNow],
-                updatedOn: [dateNow, dateNow],
+                createdOn: [{ kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }],
+                updatedOn: [{ kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }, { kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }],
                 isDirty: {
                     update: true
                 }
