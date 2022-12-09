@@ -1,25 +1,37 @@
 # CallOrGet
 
-A simple utility type and function that allows you to pass and generate values that are either a value or a function that generates a value.
+A plugin that manipulates Kysely queries to add default values.
 
 ## Installation
 
 ```bash
-npm install call-or-get
+npm install kysely-defaults-plugin
 ```
 
 ## Usage
 
-```python
-import { callOrGet, ValueOrFactory } from "value-or-factory"
+```typescript
 
-function print(value: ValueOrFactory<string, [string]>) {
- return callOrGet(value, "")
-}
-
-print("text")
-print(() => "text")
-print(initialText => initialText + "text")
+const companyId = 1
+const userId = 1
+const dateNow: RawNode = { kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }
+const plugin = new KyselyDefaultsPlugin({
+    specs: [
+        {
+            table: "*",
+            columns: {
+                companyId: [companyId],
+                createdById: [userId],
+                updatedById: [userId, userId],
+                createdOn: [dateNow],
+                updatedOn: [dateNow, dateNow],
+                isDirty: {
+                    update: true
+                }
+            }
+        }
+    ]
+})
 
 ```
 

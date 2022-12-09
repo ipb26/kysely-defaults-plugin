@@ -2,6 +2,7 @@ import { ColumnNode, ColumnUpdateNode, InsertQueryNode, KyselyPlugin, ListNodeIt
 import { callOrGet, ValueOrFactory } from "value-or-factory"
 
 type TableMatcher = string | string[] | "*" | RegExp | ((table: string) => boolean)
+type TableColumn = [InsertFactory] | [InsertFactory, UpdateFactory] | { insert?: InsertFactory, update?: UpdateFactory, always?: UpdateFactory }
 type Primitive = number | string | boolean | bigint | null
 type NodeValue = ListNodeItem & ValueExpressionNode
 type NodeValueFactory<Q> = ValueOrFactory<NodeValue | Primitive, [Q]>
@@ -15,7 +16,7 @@ export type DefaultsPluginOptions = {
 
 export type DefaultSpec = {
     table: TableMatcher
-    columns: Record<string, [InsertFactory] | [InsertFactory, UpdateFactory] | { insert?: InsertFactory, update?: UpdateFactory, always?: UpdateFactory }>
+    columns: Record<string, TableColumn>
 }
 
 export default class DefaultsPlugin implements KyselyPlugin {
