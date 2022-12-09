@@ -15,7 +15,8 @@ npm install kysely-defaults-plugin
 const companyId = 1
 const userId = 1
 const plugin = new KyselyDefaultsPlugin({
-    specs: [
+    throwOnUnsupported: true,
+    tables: [
         {
             table: "*",
             columns: {
