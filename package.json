@@ -1,0 +1,17 @@
+{
+  "name": "kysely-defaults-plugin",
+  "version": "0.0.1",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc"
+  },
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "kysely": "^0.22.0",
+    "value-or-factory": "^0.0.1"
+  }
+}

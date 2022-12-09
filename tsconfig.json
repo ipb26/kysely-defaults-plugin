@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "outDir": "dist",
+        "declaration": true,
+        "strict": true,
+        "alwaysStrict": true,
+        "noImplicitOverride": true,
+        "noImplicitAny": true,
+        "noImplicitThis": true,
+        "sourceMap": true,
+        "allowUnreachableCode": false,
+        "allowUnusedLabels": false,
+        "noFallthroughCasesInSwitch": true,
+        "noPropertyAccessFromIndexSignature": true,
+        "noUncheckedIndexedAccess": true,
+        "moduleResolution": "node",
+        "forceConsistentCasingInFileNames": true,
+        "target": "esnext",
+        "allowSyntheticDefaultImports": true,
+        "module": "esnext"
+    },
+    "include": [
+        "./src"
+    ]
+}
