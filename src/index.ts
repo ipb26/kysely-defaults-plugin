@@ -157,7 +157,7 @@ class DefaultsTransformer extends OperationNodeTransformer {
             return node
         }
         if (node.values?.kind !== "ValuesNode") {
-            if (this.options.throwOnUnsupported ?? false) {
+            if (this.options.throwOnUnsupported ?? true) {
                 throw new Error("This type of ValuesNode is not supported by the DefaultsPlugin.")
             }
             return node
