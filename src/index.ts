@@ -1,12 +1,7 @@
 import { ColumnNode, ColumnUpdateNode, InsertQueryNode, KyselyPlugin, ListNodeItem, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueExpressionNode, ValueNode, ValuesItemNode } from "kysely"
-import { SchemableIdentifierNode } from "kysely/dist/cjs/operation-node/schemable-identifier-node"
 import { callOrGet, ValueOrFactory } from "value-or-factory"
 
-export type DefaultTable = { table: DefaultMatchers, columns: Record<string, DefaultColumn> }
-export type DefaultStringMatcher = string | "*"
-export type DefaultStringOrFunctionMatcher = string | "*" | ((name: string) => boolean)
-export type DefaultMatcher = DefaultStringMatcher | { table: DefaultStringOrFunctionMatcher | DefaultStringOrFunctionMatcher[], schema: DefaultStringOrFunctionMatcher } | ((table: string, schema?: string) => boolean)
-export type DefaultMatchers = DefaultMatcher | DefaultMatcher[]
+export type DefaultTable = { table: TableMatch | TableMatch[], columns: Record<string, DefaultColumn> }
 export type DefaultColumn = [InsertDefault] | [InsertDefault, UpdateDefault] | { insert?: InsertDefault, update?: UpdateDefault, always?: UpdateDefault }
 export type DefaultPrimitive = number | string | boolean | bigint | null
 export type DefaultNode = ListNodeItem & ValueExpressionNode
@@ -46,10 +41,54 @@ type DefaultsTransformerOptions = {
     throwOnUnsupported?: boolean
 }
 
+export type TableIndividualMatch = string | "*" | ((name: string) => boolean)
+export type TableMatch = string | "*" | { table: TableIndividualMatch | TableIndividualMatch[], schema: TableIndividualMatch | TableIndividualMatch[] } | ((table: string, schema?: string) => boolean)
+
+class TableMatcher {
+
+    constructor(private readonly matchers: TableMatch | TableMatch[]) {
+    }
+
+    private match(matcher: TableMatch, table: string, schema: string | undefined) {
+        if (typeof matcher === "function") {
+            return matcher(table, schema)
+        }
+        else if (typeof matcher === "object") {
+            if (schema === undefined) {
+                return false
+            }
+            return [matcher.table].flat().map(_ => this.individualMatch(_, table)).includes(true) && [matcher.schema].flat().map(_ => this.individualMatch(_, schema)).includes(true)
+        }
+        else {
+            const [first, second] = matcher.split(".")
+            if (second === undefined) {
+                return first === "*" || first === table
+            }
+            else {
+                return (first === "*" || first === schema) && (second === "*" || second === table)
+            }
+        }
+    }
+    private individualMatch(matcher: TableIndividualMatch, name: string) {
+        if (typeof matcher === "function") {
+            return matcher(name)
+        }
+        return matcher === "*" || matcher === name
+    }
+
+    test(table: string, schema: string | undefined) {
+        return [this.matchers].flat().map(_ => this.match(_, table, schema)).includes(true)
+    }
+
+}
+
 class DefaultsTransformer extends OperationNodeTransformer {
+
+    readonly tableMatcher
 
     constructor(private readonly options: DefaultsTransformerOptions) {
         super()
+        this.tableMatcher = new TableMatcher(options.table.table)
     }
 
     private valueToNode<Q>(factory: DefaultValue<Q>, node: Q): DefaultNode {
@@ -92,45 +131,6 @@ class DefaultsTransformer extends OperationNodeTransformer {
             return [[key, this.valueToNode(data, node)] as const]
         })
     }
-    private matchString(name: string, matcher: DefaultStringMatcher) {
-        if (matcher === "*") {
-            return true
-        }
-        return matcher === name
-    }
-    private matchStringOrFunction(name: string, matcher: DefaultStringOrFunctionMatcher) {
-        if (typeof matcher === "function") {
-            return matcher(name)
-        }
-        return this.matchString(name, matcher)
-    }
-    private testMatcher(node: SchemableIdentifierNode, matcher: DefaultMatcher) {
-        const tableName = node.identifier.name
-        const schemaName = node.schema?.name
-        if (typeof matcher === "function") {
-            return matcher(tableName, schemaName)
-        }
-        else if (typeof matcher === "object") {
-            if (schemaName === undefined) {
-                return false
-            }
-            const tableMatcher = Array.isArray(matcher.table) ? matcher.table : [matcher.table]
-            const schemaMatcher = matcher.schema
-            const tableMatches = tableMatcher.map(_ => this.matchStringOrFunction(tableName, _)).includes(true)
-            const schemaMatches = this.matchStringOrFunction(schemaName, schemaMatcher)
-            return tableMatches && schemaMatches
-        }
-        else {
-            return this.matchString(tableName, matcher)
-        }
-    }
-    private includeTable(node: SchemableIdentifierNode) {
-        const matcher = this.options.table.table
-        if (Array.isArray(matcher)) {
-            return matcher.map(_ => this.testMatcher(node, _)).includes(true)
-        }
-        return this.testMatcher(node, matcher)
-    }
 
     protected override transformUpdateQuery(originalNode: UpdateQueryNode): UpdateQueryNode {
         const node = super.transformUpdateQuery(originalNode)
@@ -152,7 +152,7 @@ class DefaultsTransformer extends OperationNodeTransformer {
         if (table === undefined) {
             return node
         }
-        if (!this.includeTable(table)) {
+        if (!this.tableMatcher.test(table.identifier.name, table.schema?.name)) {
             return node
         }
         const update = this.updateValues(node)
@@ -179,7 +179,7 @@ class DefaultsTransformer extends OperationNodeTransformer {
 
     protected override transformInsertQuery(originalNode: InsertQueryNode): InsertQueryNode {
         const node = super.transformInsertQuery(originalNode)
-        if (!this.includeTable(node.into.table)) {
+        if (!this.tableMatcher.test(node.into.table.identifier.name, node.into.table.schema?.name)) {
             return node
         }
         if (node.values?.kind !== "ValuesNode") {
