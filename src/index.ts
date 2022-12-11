@@ -1,8 +1,12 @@
 import { ColumnNode, ColumnUpdateNode, InsertQueryNode, KyselyPlugin, ListNodeItem, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueExpressionNode, ValueNode, ValuesItemNode } from "kysely"
+import { SchemableIdentifierNode } from "kysely/dist/cjs/operation-node/schemable-identifier-node"
 import { callOrGet, ValueOrFactory } from "value-or-factory"
 
-export type DefaultTable = { table: DefaultMatcher, columns: Record<string, DefaultColumn> }
-export type DefaultMatcher = string | string[] | "*" | RegExp | ((table: string) => boolean)
+export type DefaultTable = { table: DefaultMatchers, columns: Record<string, DefaultColumn> }
+export type DefaultStringMatcher = string | "*"
+export type DefaultStringOrFunctionMatcher = string | "*" | ((name: string) => boolean)
+export type DefaultMatcher = DefaultStringMatcher | { table: DefaultStringOrFunctionMatcher | DefaultStringOrFunctionMatcher[], schema: DefaultStringOrFunctionMatcher } | ((table: string, schema?: string) => boolean)
+export type DefaultMatchers = DefaultMatcher | DefaultMatcher[]
 export type DefaultColumn = [InsertDefault] | [InsertDefault, UpdateDefault] | { insert?: InsertDefault, update?: UpdateDefault, always?: UpdateDefault }
 export type DefaultPrimitive = number | string | boolean | bigint | null
 export type DefaultNode = ListNodeItem & ValueExpressionNode
@@ -88,33 +92,55 @@ class DefaultsTransformer extends OperationNodeTransformer {
             return [[key, this.valueToNode(data, node)] as const]
         })
     }
-    private includeTable(name: string) {
-        if (this.options.table.table === undefined) {
+    private matchString(name: string, matcher: DefaultStringMatcher) {
+        if (matcher === "*") {
             return true
         }
-        else if (typeof this.options.table.table === "string") {
-            return this.options.table.table === name || this.options.table.table === "*"
+        return matcher === name
+    }
+    private matchStringOrFunction(name: string, matcher: DefaultStringOrFunctionMatcher) {
+        if (typeof matcher === "function") {
+            return matcher(name)
         }
-        else if (this.options.table.table instanceof RegExp) {
-            return this.options.table.table.test(name)
+        return this.matchString(name, matcher)
+    }
+    private testMatcher(node: SchemableIdentifierNode, matcher: DefaultMatcher) {
+        const tableName = node.identifier.name
+        const schemaName = node.schema?.name
+        if (typeof matcher === "function") {
+            return matcher(tableName, schemaName)
         }
-        else if (typeof this.options.table.table === "function") {
-            return this.options.table.table(name)
+        else if (typeof matcher === "object") {
+            if (schemaName === undefined) {
+                return false
+            }
+            const tableMatcher = Array.isArray(matcher.table) ? matcher.table : [matcher.table]
+            const schemaMatcher = matcher.schema
+            const tableMatches = tableMatcher.map(_ => this.matchStringOrFunction(tableName, _)).includes(true)
+            const schemaMatches = this.matchStringOrFunction(schemaName, schemaMatcher)
+            return tableMatches && schemaMatches
         }
         else {
-            return this.options.table.table.indexOf(name) !== -1
+            return this.matchString(tableName, matcher)
         }
+    }
+    private includeTable(node: SchemableIdentifierNode) {
+        const matcher = this.options.table.table
+        if (Array.isArray(matcher)) {
+            return matcher.map(_ => this.testMatcher(node, _)).includes(true)
+        }
+        return this.testMatcher(node, matcher)
     }
 
     protected override transformUpdateQuery(originalNode: UpdateQueryNode): UpdateQueryNode {
         const node = super.transformUpdateQuery(originalNode)
         const table = (() => {
             if (node.table.kind === "TableNode") {
-                return node.table.table.identifier.name
+                return node.table.table
             }
             else {
                 if (node.table.node.kind === "TableNode") {
-                    return node.table.node.table.identifier.name
+                    return node.table.node.table
                 }
                 else {
                     if (this.options.throwOnUnsupported ?? false) {
@@ -153,7 +179,7 @@ class DefaultsTransformer extends OperationNodeTransformer {
 
     protected override transformInsertQuery(originalNode: InsertQueryNode): InsertQueryNode {
         const node = super.transformInsertQuery(originalNode)
-        if (!this.includeTable(node.into.table.identifier.name)) {
+        if (!this.includeTable(node.into.table)) {
             return node
         }
         if (node.values?.kind !== "ValuesNode") {

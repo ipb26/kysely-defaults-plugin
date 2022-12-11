@@ -1,4 +1,4 @@
-# CallOrGet
+# Kysely Defaults Plugin
 
 A plugin that manipulates Kysely queries to add default values.
 
@@ -12,24 +12,46 @@ npm install kysely-defaults-plugin
 
 ```typescript
 
-const companyId = 1
-const userId = 1
 const plugin = new KyselyDefaultsPlugin({
     throwOnUnsupported: true,
     tables: [
         {
             table: "*",
             columns: {
-                companyId: [companyId],
-                createdById: [userId],
-                updatedById: [userId, userId],
-                createdOn: [{ kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }],
-                updatedOn: [{ kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }, { kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }],
-                isDirty: {
-                    update: true
+                column1: ["INSERT"]
+            }
+        },
+        {
+            table: "table1",
+            columns: {
+                column1: ["INSERT", "UPDATE"]
+            }
+        },
+        {
+            table: ["table1", "table2"],
+            columns: {
+                column1: {
+                    always: node => "ALWAYS"
                 }
             }
-        }
+        },
+        {
+            table: [{ schema: "schema1", table: ["table1", "table2"] }]
+            columns: {
+                column1: {
+                    insert: { kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] },
+                    update: { kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }
+                }
+            }
+        },
+        {
+            table: (table, schema) => schema === "schema1" && ["table1", "table2"].includes(table),
+            columns: {
+                column1: {
+                    always: "ALWAYS"
+                }
+            }
+        },
     ]
 })
 
