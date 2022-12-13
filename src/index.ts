@@ -15,6 +15,9 @@ export type DefaultsPluginOptions = {
     throwOnUnsupported?: boolean
 }
 
+//TODO cleanup
+export * from "./DiscriminatorPlugin"
+
 export default class DefaultsPlugin implements KyselyPlugin {
 
     private readonly transformers
