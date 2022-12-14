@@ -16,7 +16,7 @@ export type DefaultsPluginOptions = {
 }
 
 //TODO cleanup
-export * from "./DiscriminatorPlugin"
+export * from "./discriminator"
 
 export default class DefaultsPlugin implements KyselyPlugin {
 

@@ -20,6 +20,6 @@
         "module": "esnext"
     },
     "include": [
-        "./src"
+        "src"
     ]
 }
