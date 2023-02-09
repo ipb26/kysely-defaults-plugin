@@ -31,10 +31,10 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
                 if (node.onConflict === undefined) {
                     return
                 }
-                return {
+                const newOnConflict = {
                     ...node.onConflict,
                     columns: [
-                        ...node.columns ?? [],
+                        ...node.onConflict.columns ?? [],
                         ...Object.entries(callOrGet(this.discriminator.columns, node)).map<ColumnNode>(([column]) => {
                             return {
                                 kind: "ColumnNode",
@@ -46,6 +46,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
                         })
                     ]
                 }
+                return newOnConflict
             })(),
         }
     }
