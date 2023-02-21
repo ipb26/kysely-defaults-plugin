@@ -1,8 +1,9 @@
-import { ColumnNode, ColumnUpdateNode, InsertQueryNode, KyselyPlugin, ListNodeItem, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueExpressionNode, ValueNode, ValuesItemNode } from "kysely"
+import { InsertQueryNode, KyselyPlugin, ListNodeItem, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueExpressionNode, ValuesItemNode } from "kysely"
 import { callOrGet, ValueOrFactory } from "value-or-factory"
 import { TableMatch, TableMatcher } from "./matcher"
 
-export type DefaultTable = { table: TableMatch | TableMatch[], columns: Record<string, DefaultColumn> }
+export type DefaultColumns = Record<string, DefaultColumn>
+export type DefaultTable = { table: TableMatch | TableMatch[], defaults?: DefaultColumns, overrides?: DefaultColumns }
 export type DefaultColumn = [InsertDefault] | [InsertDefault, UpdateDefault] | { insert?: InsertDefault, update?: UpdateDefault, always?: UpdateDefault }
 export type DefaultPrimitive = number | string | boolean | bigint | null
 export type DefaultNode = ListNodeItem & ValueExpressionNode
@@ -17,6 +18,10 @@ export type DefaultsPluginOptions = {
 
 //TODO cleanup
 export * from "./discriminator"
+
+function omitKeys<V>(remove: string[], object: Record<string, V>) {
+    return Object.fromEntries(Object.entries(object).filter(_ => !remove.includes(_[0])))
+}
 
 export default class DefaultsPlugin implements KyselyPlugin {
 
@@ -64,8 +69,8 @@ class DefaultsTransformer extends OperationNodeTransformer {
             value
         }
     }
-    private insertValues(node: InsertQueryNode) {
-        return Object.entries(this.options.table.columns).flatMap(([key, config]) => {
+    private insertValues(node: InsertQueryNode, columns?: DefaultColumns) {
+        return Object.fromEntries(Object.entries(columns ?? {}).flatMap(([key, config]) => {
             if (Array.isArray(config)) {
                 if (config[0] === undefined) {
                     return []
@@ -77,10 +82,10 @@ class DefaultsTransformer extends OperationNodeTransformer {
                 return []
             }
             return [[key, this.valueToNode(data, node)] as const]
-        })
+        }))
     }
-    private updateValues(node: InsertQueryNode | UpdateQueryNode) {
-        return Object.entries(this.options.table.columns).flatMap(([key, config]) => {
+    private updateValues(node: InsertQueryNode | UpdateQueryNode, columns?: DefaultColumns) {
+        return Object.fromEntries(Object.entries(columns ?? {}).flatMap(([key, config]) => {
             if (Array.isArray(config)) {
                 if (config[1] === undefined) {
                     return []
@@ -92,7 +97,7 @@ class DefaultsTransformer extends OperationNodeTransformer {
                 return []
             }
             return [[key, this.valueToNode(data, node)] as const]
-        })
+        }))
     }
 
     protected override transformUpdateQuery(originalNode: UpdateQueryNode): UpdateQueryNode {
@@ -118,25 +123,28 @@ class DefaultsTransformer extends OperationNodeTransformer {
         if (!this.tableMatcher.test(table.identifier.name, table.schema?.name)) {
             return node
         }
-        const update = this.updateValues(node)
+        const defaults = this.updateValues(node, this.options.table.defaults)
+        const overrides = this.updateValues(node, this.options.table.overrides)
+        const updates = {
+            ...defaults,
+            ...Object.fromEntries((node.updates ?? []).map(_ => [_.column.column.name, _.value])),
+            ...overrides,
+        }
         return {
             ...node,
-            updates: [
-                ...node.updates ?? [],
-                ...update.map<ColumnUpdateNode>(([key, value]) => {
-                    return {
-                        kind: "ColumnUpdateNode",
+            updates: Object.entries(updates).map(update => {
+                return {
+                    kind: "ColumnUpdateNode",
+                    column: {
+                        kind: "ColumnNode",
                         column: {
-                            kind: "ColumnNode",
-                            column: {
-                                kind: "IdentifierNode",
-                                name: key,
-                            }
-                        },
-                        value
-                    }
-                })
-            ]
+                            kind: "IdentifierNode",
+                            name: update[0],
+                        }
+                    },
+                    value: update[1]
+                }
+            })
         }
     }
 
@@ -151,46 +159,70 @@ class DefaultsTransformer extends OperationNodeTransformer {
             }
             return node
         }
-        const insert = this.insertValues(node)
-        const update = this.updateValues(node)
+        const insertDefaults = this.insertValues(node, this.options.table.defaults)
+        const insertOverrides = this.insertValues(node, this.options.table.overrides)
+        const updateDefaults = this.updateValues(node, this.options.table.defaults)
+        const updateOverrides = this.updateValues(node, this.options.table.overrides)
+        const originalColumnNames = node.columns?.map(_ => _.column.name) ?? []
+        const columnNames = [...Object.keys(insertDefaults), ...originalColumnNames, ...Object.keys(insertOverrides)].filter((value, index, array) => array.indexOf(value) === index)
+        //const originalColumns = node.columns ?? []
+        //const originalColumnNames = originalColumns.map(_ => _.column.name)
+        //const removeOriginalInsertIndexes = originalColumnNames.flatMap((column, index) => Object.keys(insertOverrides).includes(column) ? [index] : [])
         return {
             ...node,
             onConflict: (() => {
                 if (node.onConflict === undefined) {
                     return
                 }
+                const updates = {
+                    ...updateDefaults,
+                    ...Object.fromEntries((node.onConflict.updates ?? []).map(_ => [_.column.column.name, _.value])),
+                    ...updateOverrides,
+                }
                 return {
                     ...node.onConflict,
-                    updates: [
-                        ...node.onConflict.updates ?? [],
-                        ...update.map<ColumnUpdateNode>(([key, value]) => {
-                            return {
-                                kind: "ColumnUpdateNode",
+                    updates: Object.entries(updates).map(update => {
+                        return {
+                            kind: "ColumnUpdateNode",
+                            column: {
+                                kind: "ColumnNode",
                                 column: {
-                                    kind: "ColumnNode",
-                                    column: {
-                                        kind: "IdentifierNode",
-                                        name: key,
-                                    }
-                                },
-                                value
-                            }
-                        })
-                    ]
+                                    kind: "IdentifierNode",
+                                    name: update[0],
+                                }
+                            },
+                            value: update[1],
+                        }
+                    })
                 }
             })(),
-            columns: [
-                ...node.columns ?? [],
-                ...insert.map<ColumnNode>(([name]) => {
-                    return {
-                        kind: "ColumnNode",
-                        column: {
-                            kind: "IdentifierNode",
-                            name,
-                        }
+            columns: columnNames.map(name => {
+                return {
+                    kind: "ColumnNode" as const,
+                    column: {
+                        kind: "IdentifierNode" as const,
+                        name,
                     }
-                })
-            ],
+                }
+            }),
+            /*
+            Object.entries({
+                ...insertDefaults,
+                ...Object.fromEntries((node.onConflict.updates ?? []).map(_ => [_.column.column.name, _.value])),
+                ...insertOverrides,
+            })
+            [
+                ...originalColumns.filter((column, index) => !removeOriginalInsertIndexes.includes(index)),
+            ...Object.entries({ ...omitKeys(originalColumnNames, insertDefaults), ...insertOverrides }).map<ColumnNode>(([name]) => {
+                return {
+                    kind: "ColumnNode",
+                    column: {
+                        kind: "IdentifierNode",
+                        name,
+                    }
+                }
+            })
+            ],*/
             values: {
                 kind: "ValuesNode",
                 values: [
@@ -198,24 +230,13 @@ class DefaultsTransformer extends OperationNodeTransformer {
                         return {
                             kind: "ValueListNode",
                             values: (() => {
-                                const add = insert.map<ListNodeItem>(_ => _[1])
-                                if (list.kind === "ValueListNode") {
-                                    return [
-                                        ...list.values,
-                                        ...add
-                                    ]
+                                const original = list.kind === "ValueListNode" ? list.values : list.values.map(value => ({ kind: "ValueNode" as const, value }))
+                                const values = {
+                                    ...insertDefaults,
+                                    ...Object.fromEntries((originalColumnNames).map((name, index) => [name, original[index]])),
+                                    ...insertOverrides,
                                 }
-                                else {
-                                    return [
-                                        ...list.values.map<ValueNode>(value => {
-                                            return {
-                                                kind: "ValueNode",
-                                                value
-                                            }
-                                        }),
-                                        ...add
-                                    ]
-                                }
+                                return columnNames.map(name => values[name]!)
                             })()
                         }
                     })
