@@ -17,27 +17,19 @@ const plugin = new KyselyDefaultsPlugin({
     tables: [
         {
             table: "*",
-            columns: {
+            defaults: {
                 column1: ["INSERT"]
             }
         },
         {
             table: "table1",
-            columns: {
+            defaults: {
                 column1: ["INSERT", "UPDATE"]
             }
         },
         {
-            table: ["table1", "table2"],
-            columns: {
-                column1: {
-                    always: node => "ALWAYS"
-                }
-            }
-        },
-        {
             table: [{ schema: "schema1", table: ["table1", "table2"] }]
-            columns: {
+            overrides: {
                 column1: {
                     insert: { kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] },
                     update: { kind: "RawNode", sqlFragments: ["UNIXEPOCH()"], parameters: [] }
@@ -46,12 +38,13 @@ const plugin = new KyselyDefaultsPlugin({
         },
         {
             table: (table, schema) => schema === "schema1" && ["table1", "table2"].includes(table),
-            columns: {
+            overrides: {
                 column1: {
-                    always: "ALWAYS"
+                    insert: "INSERT",
+                    update: "UPDATE"
                 }
             }
-        },
+        }
     ]
 })
 

@@ -1,18 +1,18 @@
 {
-  "name": "kysely-defaults-plugin",
-  "version": "0.0.1",
-  "license": "MIT",
-  "scripts": {
-    "build": "tsc",
-    "watch": "nodemon -e '*' --watch src --watch package.json --watch tsconfig.json --exec yarn build"
-  },
-  "module": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "files": [
-    "dist"
-  ],
-  "dependencies": {
-    "kysely": "^0.22.0",
-    "value-or-factory": "^0.0.1"
-  }
+    "name": "kysely-plugins",
+    "version": "0.0.1",
+    "license": "MIT",
+    "scripts": {
+        "build": "tsc",
+        "watch": "nodemon -e '*' --watch src --watch package.json --watch tsconfig.json --exec yarn build"
+    },
+    "module": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "files": [
+        "dist"
+    ],
+    "dependencies": {
+        "kysely": "^0.22.0",
+        "value-or-factory": "^0.0.1"
+    }
 }
