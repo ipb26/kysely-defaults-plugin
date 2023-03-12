@@ -4,13 +4,18 @@ import { TableMatch, TableMatcher } from "./matcher"
 
 export type Discriminator = { table: TableMatch, columns: ValueOrFactory<Record<string, unknown>, [InsertQueryNode | SelectQueryNode]> }
 
+export type DiscriminatorTransformerConfig = {
+    discriminator: Discriminator
+    throwOnUnsupported?: boolean
+}
+
 export class DiscriminatorTransformer extends OperationNodeTransformer {
 
     private readonly tableMatcher
 
-    constructor(private readonly discriminator: Discriminator) {
+    constructor(private readonly config: DiscriminatorTransformerConfig) {
         super()
-        this.tableMatcher = new TableMatcher(discriminator.table)
+        this.tableMatcher = new TableMatcher(config.discriminator.table)
     }
 
     protected override transformInsertQuery(originalNode: InsertQueryNode): InsertQueryNode {
@@ -19,10 +24,9 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
             return node
         }
         if (node.values?.kind !== "ValuesNode") {
-            /*
-            if (this.options.throwOnUnsupported ?? true) {
+            if (this.config.throwOnUnsupported ?? true) {
                 throw new Error("This type of ValuesNode is not supported by the DiscriminatorPlugin.")
-            }*/
+            }
             return node
         }
         return {
@@ -35,7 +39,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
                     ...node.onConflict,
                     columns: [
                         ...node.onConflict.columns ?? [],
-                        ...Object.entries(callOrGet(this.discriminator.columns, node)).map<ColumnNode>(([column]) => {
+                        ...Object.entries(callOrGet(this.config.discriminator.columns, node)).map<ColumnNode>(([column]) => {
                             return {
                                 kind: "ColumnNode",
                                 column: {
@@ -47,7 +51,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
                     ]
                 }
                 return newOnConflict
-            })(),
+            })()
         }
     }
 
@@ -73,7 +77,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
                 if (!this.tableMatcher.test(table.table, table.schema)) {
                     return []
                 }
-                return Object.entries(callOrGet(this.discriminator.columns, node)).map<FilterExpressionNode>(([column, value]) => {
+                return Object.entries(callOrGet(this.config.discriminator.columns, node)).map<FilterExpressionNode>(([column, value]) => {
                     return {
                         kind: "FilterNode",
                         left: {
@@ -145,15 +149,15 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
 
 }
 
-export type DiscriminatorPluginOptions = { tables: Discriminator[] }
+export type DiscriminatorPluginOptions = { tables: Discriminator[], throwOnUnsupported?: boolean }
 
 export class DiscriminatorPlugin implements KyselyPlugin {
 
     private readonly transformers
 
     constructor(options: DiscriminatorPluginOptions) {
-        this.transformers = options.tables.map(table => {
-            return new DiscriminatorTransformer(table)
+        this.transformers = options.tables.map(discriminator => {
+            return new DiscriminatorTransformer({ discriminator, throwOnUnsupported: options.throwOnUnsupported })
         })
     }
 
