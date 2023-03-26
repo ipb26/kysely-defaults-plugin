@@ -1,4 +1,4 @@
-import { ColumnNode, FilterExpressionNode, InsertQueryNode, KyselyPlugin, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, SelectQueryNode } from "kysely"
+import { AndNode, BinaryOperationNode, ColumnNode, InsertQueryNode, KyselyPlugin, OperationNode, OperationNodeTransformer, OperatorNode, PluginTransformQueryArgs, PluginTransformResultArgs, ReferenceNode, SelectQueryNode, ValueNode } from "kysely"
 import { callOrGet, ValueOrFactory } from "value-or-factory"
 import { TableMatch, TableMatcher } from "./matcher"
 
@@ -20,7 +20,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
 
     protected override transformInsertQuery(originalNode: InsertQueryNode): InsertQueryNode {
         const node = super.transformInsertQuery(originalNode)
-        if (!this.tableMatcher.test(node.into.table.identifier.name, node.into.table.schema?.name)) {
+        if (!this.tableMatcher.test(node.into)) {
             return node
         }
         if (node.values?.kind !== "ValuesNode") {
@@ -40,13 +40,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
                     columns: [
                         ...node.onConflict.columns ?? [],
                         ...Object.entries(callOrGet(this.config.discriminator.columns, node)).map<ColumnNode>(([column]) => {
-                            return {
-                                kind: "ColumnNode",
-                                column: {
-                                    kind: "IdentifierNode",
-                                    name: column,
-                                }
-                            }
+                            return ColumnNode.create(column)
                         })
                     ]
                 }
@@ -57,82 +51,33 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
 
     protected override transformSelectQuery(originalNode: SelectQueryNode): SelectQueryNode {
         const node = super.transformSelectQuery(originalNode)
-        const fromTables = node.from.froms.flatMap(from => {
-            if (from.kind === "TableNode") {
-                return {
-                    table: from.table.identifier.name,
-                    schema: from.table.schema?.name
-                }
-            }
-            else if (from.alias.kind === "IdentifierNode") {
-                //TODO how do i get schema?
-                return []
-            }
-            else {
-                return []
-            }
-        })
         const eqNodes = [
-            ...fromTables.flatMap(table => {
-                if (!this.tableMatcher.test(table.table, table.schema)) {
+            ...node.from.froms.flatMap(from => {
+                const table = this.tableMatcher.table(from)
+                if (table === undefined) {
                     return []
                 }
-                return Object.entries(callOrGet(this.config.discriminator.columns, node)).map<FilterExpressionNode>(([column, value]) => {
-                    return {
-                        kind: "FilterNode",
-                        left: {
-                            kind: "ReferenceNode",
-                            table: {
-                                kind: "TableNode",
-                                table: {
-                                    kind: "SchemableIdentifierNode",
-                                    identifier: {
-                                        kind: "IdentifierNode",
-                                        name: table.table
-                                    },
-                                    ...(() => {
-                                        if (table.schema !== undefined) {
-                                            return {
-                                                schema: {
-                                                    kind: "IdentifierNode",
-                                                    name: table.schema
-                                                }
-                                            }
-                                        }
-                                    })()
-                                }
-                            },
-                            column: {
-                                kind: "ColumnNode",
-                                column: {
-                                    kind: "IdentifierNode",
-                                    name: column,
-                                }
-                            }
-                        },
-                        op: {
-                            kind: "OperatorNode",
-                            operator: "="
-                        },
-                        right: {
-                            kind: "ValueNode",
-                            value: value
-                        }
-                    }
+                if (!this.tableMatcher.test(table)) {
+                    return []
+                }
+                return Object.entries(callOrGet(this.config.discriminator.columns, node)).map(([column, value]) => {
+                    return BinaryOperationNode.create(
+                        ReferenceNode.create(table, ColumnNode.create(column)),
+                        OperatorNode.create("="),
+                        ValueNode.create(value)
+                    )
                 })
             }),
-            ...(node.where?.where ? [node.where?.where] : []),
         ]
-        const filterNode = eqNodes.reduce<FilterExpressionNode | undefined>((prev, current) => {
-            if (prev === undefined) {
-                return current
-            }
-            return {
-                kind: "AndNode",
-                left: prev,
-                right: current,
-            }
-        }, undefined)
+        const filterNode = eqNodes.reduce<OperationNode | undefined>(
+            (prev, current) => {
+                if (prev === undefined) {
+                    return current
+                }
+                return AndNode.create(prev, current)
+            },
+            node.where?.where
+        )
         if (filterNode === undefined) {
             return node
         }

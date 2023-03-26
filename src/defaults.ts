@@ -1,13 +1,11 @@
-import { InsertQueryNode, KyselyPlugin, ListNodeItem, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueExpressionNode, ValuesItemNode } from "kysely"
+import { ColumnNode, ColumnUpdateNode, InsertQueryNode, KyselyPlugin, OperationNode, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueListNode, ValueNode, ValuesNode } from "kysely"
 import { callOrGet, ValueOrFactory } from "value-or-factory"
 import { TableMatch, TableMatcher } from "./matcher"
 
 export type DefaultColumns = Record<string, DefaultColumn>
 export type DefaultTable = { table: TableMatch | TableMatch[], defaults?: DefaultColumns, overrides?: DefaultColumns }
 export type DefaultColumn = [InsertDefault] | [InsertDefault, UpdateDefault] | { insert?: InsertDefault, update?: UpdateDefault, always?: UpdateDefault }
-export type DefaultPrimitive = number | string | boolean | bigint | null
-export type DefaultNode = ListNodeItem & ValueExpressionNode
-export type DefaultValue<Q> = ValueOrFactory<DefaultNode | DefaultPrimitive, [Q]>
+export type DefaultValue<Q> = ValueOrFactory<OperationNode | number | string | boolean | bigint | null, [Q]>
 export type InsertDefault = DefaultValue<InsertQueryNode>
 export type UpdateDefault = DefaultValue<InsertQueryNode | UpdateQueryNode>
 
@@ -52,15 +50,12 @@ export class DefaultsTransformer extends OperationNodeTransformer {
         this.tableMatcher = new TableMatcher(options.table.table)
     }
 
-    private valueToNode<Q>(factory: DefaultValue<Q>, node: Q): DefaultNode {
+    private valueToNode<Q>(factory: DefaultValue<Q>, node: Q) {
         const value = callOrGet(factory, node)
         if (typeof value === "object" && value !== null) {
             return value
         }
-        return {
-            kind: "ValueNode",
-            value
-        }
+        return ValueNode.create(value)
     }
     private insertValues(node: InsertQueryNode, columns?: DefaultColumns) {
         return Object.fromEntries(Object.entries(columns ?? {}).flatMap(([key, config]) => {
@@ -95,25 +90,14 @@ export class DefaultsTransformer extends OperationNodeTransformer {
 
     protected override transformUpdateQuery(originalNode: UpdateQueryNode): UpdateQueryNode {
         const node = super.transformUpdateQuery(originalNode)
-        const table = (() => {
-            if (node.table.kind === "TableNode") {
-                return node.table.table
-            }
-            else {
-                if (node.table.node.kind === "TableNode") {
-                    return node.table.node.table
-                }
-                else {
-                    if (this.options.throwOnUnsupported ?? false) {
-                        throw new Error("This type of AliasNode is not supported by the DefaultsPlugin.")
-                    }
-                }
-            }
-        })()
+        const table = this.tableMatcher.table(node.table)
         if (table === undefined) {
+            if (this.options.throwOnUnsupported ?? true) {
+                throw new Error("This type of update query is not supported by the DiscriminatorPlugin.")
+            }
             return node
         }
-        if (!this.tableMatcher.test(table.identifier.name, table.schema?.name)) {
+        if (!this.tableMatcher.test(table)) {
             return node
         }
         const defaults = this.updateValues(node, this.options.table.defaults)
@@ -143,10 +127,13 @@ export class DefaultsTransformer extends OperationNodeTransformer {
 
     protected override transformInsertQuery(originalNode: InsertQueryNode): InsertQueryNode {
         const node = super.transformInsertQuery(originalNode)
-        if (!this.tableMatcher.test(node.into.table.identifier.name, node.into.table.schema?.name)) {
+        if (!this.tableMatcher.test(node.into)) {
             return node
         }
-        if (node.values?.kind !== "ValuesNode") {
+        if (node.values === undefined) {
+            return node
+        }
+        if (!ValuesNode.is(node.values)) {
             if (this.options.throwOnUnsupported ?? true) {
                 throw new Error("This type of ValuesNode is not supported by the DefaultsPlugin.")
             }
@@ -172,48 +159,24 @@ export class DefaultsTransformer extends OperationNodeTransformer {
                 return {
                     ...node.onConflict,
                     updates: Object.entries(updates).map(update => {
-                        return {
-                            kind: "ColumnUpdateNode",
-                            column: {
-                                kind: "ColumnNode",
-                                column: {
-                                    kind: "IdentifierNode",
-                                    name: update[0],
-                                }
-                            },
-                            value: update[1],
-                        }
+                        return ColumnUpdateNode.create(ColumnNode.create(update[0]), update[1])
                     })
                 }
             })(),
             columns: columnNames.map(name => {
-                return {
-                    kind: "ColumnNode" as const,
-                    column: {
-                        kind: "IdentifierNode" as const,
-                        name,
-                    }
-                }
+                return ColumnNode.create(name)
             }),
-            values: {
-                kind: "ValuesNode",
-                values: [
-                    ...node.values.values.map<ValuesItemNode>(list => {
-                        return {
-                            kind: "ValueListNode",
-                            values: (() => {
-                                const original = list.kind === "ValueListNode" ? list.values : list.values.map(value => ({ kind: "ValueNode" as const, value }))
-                                const values = {
-                                    ...insertDefaults,
-                                    ...Object.fromEntries((originalColumnNames).map((name, index) => [name, original[index]])),
-                                    ...insertOverrides,
-                                }
-                                return columnNames.map(name => values[name]!)
-                            })()
-                        }
-                    })
-                ]
-            }
+            values: ValuesNode.create(node.values.values.map(list => {
+                return ValueListNode.create((() => {
+                    const original = list.kind === "ValueListNode" ? list.values : list.values.map(value => ({ kind: "ValueNode" as const, value }))
+                    const values = {
+                        ...insertDefaults,
+                        ...Object.fromEntries((originalColumnNames).map((name, index) => [name, original[index]])),
+                        ...insertOverrides,
+                    }
+                    return columnNames.map(name => values[name]!)
+                })())
+            }))
         }
     }
 
