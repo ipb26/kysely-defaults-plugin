@@ -1,32 +1,34 @@
-import { AndNode, BinaryOperationNode, ColumnNode, InsertQueryNode, KyselyPlugin, OperationNode, OperationNodeTransformer, OperatorNode, PluginTransformQueryArgs, PluginTransformResultArgs, ReferenceNode, SelectQueryNode, ValueNode } from "kysely"
+import { AndNode, BinaryOperationNode, ColumnNode, InsertQueryNode, JoinNode, KyselyPlugin, OperationNode, OperationNodeTransformer, OperatorNode, PluginTransformQueryArgs, PluginTransformResultArgs, ReferenceNode, SelectQueryNode, TableNode, UpdateQueryNode, ValueNode, WhereNode } from "kysely"
 import { callOrGet, ValueOrFactory } from "value-or-factory"
-import { TableMatch, TableMatcher } from "./matcher"
+import { TableMatcher, TableTests } from "./matcher"
 
-export type Discriminator = { table: TableMatch, columns: ValueOrFactory<Record<string, unknown>, [InsertQueryNode | SelectQueryNode]> }
+export type DiscriminatedNode = InsertQueryNode | SelectQueryNode | UpdateQueryNode | JoinNode
+export type Discriminator = { table: TableTests, columns: ValueOrFactory<Record<string, unknown>, [DiscriminatedNode]> }
 
 export type DiscriminatorTransformerConfig = {
     discriminator: Discriminator
     throwOnUnsupported?: boolean
 }
 
+function maybe<I, O>(value: I | undefined | null, func: (value: I) => O) {
+    if (value === undefined || value === null) {
+        return undefined
+    }
+    return func(value)
+}
+
 export class DiscriminatorTransformer extends OperationNodeTransformer {
 
-    private readonly tableMatcher
+    private readonly matcher
 
     constructor(private readonly config: DiscriminatorTransformerConfig) {
         super()
-        this.tableMatcher = new TableMatcher(config.discriminator.table)
+        this.matcher = new TableMatcher(config.discriminator.table)
     }
 
     protected override transformInsertQuery(originalNode: InsertQueryNode): InsertQueryNode {
         const node = super.transformInsertQuery(originalNode)
-        if (!this.tableMatcher.test(node.into)) {
-            return node
-        }
-        if (node.values?.kind !== "ValuesNode") {
-            if (this.config.throwOnUnsupported ?? true) {
-                throw new Error("This type of ValuesNode is not supported by the DiscriminatorPlugin.")
-            }
+        if (!this.matcher.test(node.into)) {
             return node
         }
         return {
@@ -35,60 +37,81 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
                 if (node.onConflict === undefined) {
                     return
                 }
-                const newOnConflict = {
+                return {
                     ...node.onConflict,
-                    columns: [
-                        ...node.onConflict.columns ?? [],
-                        ...Object.entries(callOrGet(this.config.discriminator.columns, node)).map<ColumnNode>(([column]) => {
-                            return ColumnNode.create(column)
-                        })
-                    ]
+                    columns: (() => {
+                        if (node.onConflict.columns === undefined) {
+                            return
+                        }
+                        const columns = Object.keys(callOrGet(this.config.discriminator.columns, node)).map(column => ColumnNode.create(column))
+                        return [
+                            ...node.onConflict.columns,
+                            ...columns
+                        ]
+                    })()
                 }
-                return newOnConflict
             })()
         }
     }
 
-    protected override transformSelectQuery(originalNode: SelectQueryNode): SelectQueryNode {
-        const node = super.transformSelectQuery(originalNode)
-        const eqNodes = [
-            ...node.from.froms.flatMap(from => {
-                const table = this.tableMatcher.table(from)
-                if (table === undefined) {
-                    return []
-                }
-                if (!this.tableMatcher.test(table)) {
-                    return []
-                }
-                return Object.entries(callOrGet(this.config.discriminator.columns, node)).map(([column, value]) => {
-                    return BinaryOperationNode.create(
-                        ReferenceNode.create(table, ColumnNode.create(column)),
-                        OperatorNode.create("="),
-                        ValueNode.create(value)
-                    )
-                })
-            }),
-        ]
-        const filterNode = eqNodes.reduce<OperationNode | undefined>(
-            (prev, current) => {
-                if (prev === undefined) {
-                    return current
-                }
-                return AndNode.create(prev, current)
-            },
-            node.where?.where
-        )
-        if (filterNode === undefined) {
+    //TODO updates
+    //TODO joins
+
+    private combineConditions(...conditions: (OperationNode | undefined)[]) {
+        const filtered = conditions.filter((_): _ is OperationNode => _ !== undefined)
+        if (filtered.length === 0) {
+            return
+        }
+        return filtered.reduce((prev, current) => AndNode.create(prev, current))
+    }
+    private conditions(table: TableNode, node: DiscriminatedNode) {
+        return Object.entries(callOrGet(this.config.discriminator.columns, node)).map(([column, value]) => {
+            return BinaryOperationNode.create(ReferenceNode.create(table, ColumnNode.create(column)),
+                OperatorNode.create("="),
+                ValueNode.create(value))
+        })
+    }
+
+    /*
+    protected override transformJoin(originalNode: JoinNode) {
+        const node = super.transformJoin(originalNode)
+        const table = this.tableMatcher.testNode(node.table)
+        if (table === undefined) {
             return node
         }
-        else {
-            return {
-                ...node,
-                where: {
-                    kind: "WhereNode",
-                    where: filterNode
-                }
+        const conditions = this.combineConditions(node.on?.on, ...this.conditions(table, node))
+        return {
+            ...node,
+            on: maybe(conditions, on => OnNode.create(on))
+        }
+    }*/
+
+    //TODO do
+    protected override transformUpdateQuery(originalNode: UpdateQueryNode) {
+        const node = super.transformUpdateQuery(originalNode)
+        const table = this.matcher.testNode(node.table)
+        if (table === undefined) {
+            return node
+        }
+        const conditions = this.combineConditions(node.where?.where, ...this.conditions(table, node))
+        return {
+            ...node,
+            where: maybe(conditions, WhereNode.create)
+        }
+    }
+    protected override transformSelectQuery(originalNode: SelectQueryNode): SelectQueryNode {
+        const node = super.transformSelectQuery(originalNode)
+        const filters = node.from.froms.flatMap(from => {
+            const table = this.matcher.testNode(from)
+            if (table === undefined) {
+                return []
             }
+            return this.conditions(table, node)
+        })
+        const conditions = this.combineConditions(node.where?.where, ...filters)
+        return {
+            ...node,
+            where: maybe(conditions, WhereNode.create)
         }
     }
 

@@ -1,9 +1,9 @@
 import { ColumnNode, ColumnUpdateNode, InsertQueryNode, KyselyPlugin, OperationNode, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueListNode, ValueNode, ValuesNode } from "kysely"
 import { callOrGet, ValueOrFactory } from "value-or-factory"
-import { TableMatch, TableMatcher } from "./matcher"
+import { TableMatcher, TableTests } from "./matcher"
 
 export type DefaultColumns = Record<string, DefaultColumn>
-export type DefaultTable = { table: TableMatch | TableMatch[], defaults?: DefaultColumns, overrides?: DefaultColumns }
+export type DefaultTable = { table: TableTests, defaults?: DefaultColumns, overrides?: DefaultColumns }
 export type DefaultColumn = [InsertDefault] | [InsertDefault, UpdateDefault] | { insert?: InsertDefault, update?: UpdateDefault, always?: UpdateDefault }
 export type DefaultValue<Q> = ValueOrFactory<OperationNode | number | string | boolean | bigint | null, [Q]>
 export type InsertDefault = DefaultValue<InsertQueryNode>
@@ -97,7 +97,7 @@ export class DefaultsTransformer extends OperationNodeTransformer {
             }
             return node
         }
-        if (!this.tableMatcher.test(table)) {
+        if (!this.tableMatcher.test(table.underlying)) {
             return node
         }
         const defaults = this.updateValues(node, this.options.table.defaults)
@@ -110,17 +110,7 @@ export class DefaultsTransformer extends OperationNodeTransformer {
         return {
             ...node,
             updates: Object.entries(updates).map(update => {
-                return {
-                    kind: "ColumnUpdateNode",
-                    column: {
-                        kind: "ColumnNode",
-                        column: {
-                            kind: "IdentifierNode",
-                            name: update[0],
-                        }
-                    },
-                    value: update[1]
-                }
+                return ColumnUpdateNode.create(ColumnNode.create(update[0]), update[1])
             })
         }
     }
@@ -163,9 +153,7 @@ export class DefaultsTransformer extends OperationNodeTransformer {
                     })
                 }
             })(),
-            columns: columnNames.map(name => {
-                return ColumnNode.create(name)
-            }),
+            columns: columnNames.map(name => ColumnNode.create(name)),
             values: ValuesNode.create(node.values.values.map(list => {
                 return ValueListNode.create((() => {
                     const original = list.kind === "ValueListNode" ? list.values : list.values.map(value => ({ kind: "ValueNode" as const, value }))

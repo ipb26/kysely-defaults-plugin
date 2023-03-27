@@ -12,6 +12,7 @@
         "dist"
     ],
     "dependencies": {
+        "fp-ts": "^2.13.1",
         "kysely": "^0.23.5",
         "value-or-factory": "^0.0.1"
     }
