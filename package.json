@@ -3,14 +3,20 @@
     "version": "0.0.1",
     "license": "MIT",
     "scripts": {
-        "build": "tsc",
-        "watch": "nodemon -e '*' --watch src --watch package.json --watch tsconfig.json --exec yarn build"
+        "clean": "rm -rf dist",
+        "build": "rm -rf dist && npx concurrently \"npx tsc -p tsconfig.esm.json\" \"npx tsc -p tsconfig.cjs.json\"",
+        "watch": "npx concurrently \"npx tsc -p tsconfig.esm.json --watch\" \"npx tsc -p tsconfig.cjs.json --watch\""
     },
-    "module": "dist/index.js",
-    "types": "dist/index.d.ts",
-    "files": [
-        "dist"
-    ],
+    "main": "./dist/cjs/index.js",
+    "module": "./dist/esm/index.js",
+    "types": "./dist/types/index.d.ts",
+    "exports": {
+        ".": {
+            "require": "./dist/cjs/index.js",
+            "import": "./dist/esm/index.js",
+            "types": "./dist/types/index.d.ts"
+        }
+    },
     "dependencies": {
         "fp-ts": "^2.13.1",
         "kysely": "^0.23.5",
