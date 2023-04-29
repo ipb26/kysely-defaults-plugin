@@ -1,5 +1,5 @@
 import { AndNode, BinaryOperationNode, ColumnNode, InsertQueryNode, JoinNode, KyselyPlugin, OperationNode, OperationNodeTransformer, OperatorNode, PluginTransformQueryArgs, PluginTransformResultArgs, ReferenceNode, SelectQueryNode, TableNode, UpdateQueryNode, ValueNode, WhereNode } from "kysely"
-import { callOrGet, ValueOrFactory } from "value-or-factory"
+import { ValueOrFactory, callOrGet } from "value-or-factory"
 import { TableMatcher, TableTests } from "./matcher"
 
 export type DiscriminatedNode = InsertQueryNode | SelectQueryNode | UpdateQueryNode | JoinNode
