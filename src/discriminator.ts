@@ -66,7 +66,9 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
     }
     private conditions(table: TableNode, node: DiscriminatedNode) {
         return Object.entries(callOrGet(this.config.discriminator.columns, node)).map(([column, value]) => {
-            return BinaryOperationNode.create(ReferenceNode.create(table, ColumnNode.create(column)),
+            //TODO referencenode is backwards?
+            // @ts-ignore
+            return BinaryOperationNode.create(ReferenceNode.create(ColumnNode.create(column), table),
                 OperatorNode.create("="),
                 ValueNode.create(value))
         })
@@ -108,6 +110,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
             }
             return this.conditions(table, node)
         })
+        console.log(filters)
         const conditions = this.combineConditions(node.where?.where, ...filters)
         return {
             ...node,
