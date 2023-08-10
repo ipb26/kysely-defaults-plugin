@@ -23,5 +23,8 @@
     },
     "devDependencies": {
         "kysely": "^0.26.1"
+    },
+    "peerDependencies": {
+        "kysely": "^0.26.1"
     }
 }

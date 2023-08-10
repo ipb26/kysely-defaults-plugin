@@ -110,7 +110,6 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
             }
             return this.conditions(table, node)
         })
-        console.log(filters)
         const conditions = this.combineConditions(node.where?.where, ...filters)
         return {
             ...node,
