@@ -1,5 +1,5 @@
 import { ColumnNode, ColumnUpdateNode, InsertQueryNode, KyselyPlugin, OperationNode, OperationNodeTransformer, PluginTransformQueryArgs, PluginTransformResultArgs, UpdateQueryNode, ValueListNode, ValueNode, ValuesNode } from "kysely"
-import { callOrGet, ValueOrFactory } from "value-or-factory"
+import { ValueOrFactory, callOrGet } from "value-or-factory"
 import { TableMatcher, TableTests } from "./matcher"
 
 export type DefaultColumns = Record<string, DefaultColumn>
@@ -28,6 +28,9 @@ export class DefaultsPlugin implements KyselyPlugin {
     }
 
     transformQuery(args: PluginTransformQueryArgs) {
+        if (args.node.kind !== "InsertQueryNode" && args.node.kind !== "UpdateQueryNode") {
+            return args.node
+        }
         return this.transformers.reduce((node, transformer) => transformer.transformNode(node), args.node)
     }
     async transformResult(args: PluginTransformResultArgs) {
