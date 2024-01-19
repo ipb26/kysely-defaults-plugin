@@ -103,7 +103,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
     }
     protected override transformSelectQuery(originalNode: SelectQueryNode): SelectQueryNode {
         const node = super.transformSelectQuery(originalNode)
-        const filters = node.from.froms.flatMap(from => {
+        const filters = (node.from?.froms ?? []).flatMap(from => {
             const table = this.matcher.testNode(from)
             if (table === undefined) {
                 return []
