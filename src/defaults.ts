@@ -9,9 +9,11 @@ export type DefaultValue<Q> = ValueOrFactory<OperationNode | number | string | b
 export type InsertDefault = DefaultValue<InsertQueryNode>
 export type UpdateDefault = DefaultValue<InsertQueryNode | UpdateQueryNode>
 
-export type DefaultsPluginOptions = {
-    tables: DefaultTable[]
-    throwOnUnsupported?: boolean
+export interface DefaultsPluginOptions {
+
+    readonly tables: DefaultTable[]
+    readonly throwOnUnsupported?: boolean | undefined
+
 }
 
 export class DefaultsPlugin implements KyselyPlugin {
@@ -39,9 +41,11 @@ export class DefaultsPlugin implements KyselyPlugin {
 
 }
 
-export type DefaultsTransformerOptions = {
-    table: DefaultTable
-    throwOnUnsupported?: boolean
+export interface DefaultsTransformerOptions {
+
+    readonly table: DefaultTable
+    readonly throwOnUnsupported?: boolean | undefined
+
 }
 
 export class DefaultsTransformer extends OperationNodeTransformer {

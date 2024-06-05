@@ -5,9 +5,11 @@ import { TableMatcher, TableTests } from "./matcher"
 export type DiscriminatedNode = InsertQueryNode | SelectQueryNode | UpdateQueryNode | JoinNode
 export type Discriminator = { table: TableTests, columns: ValueOrFactory<Record<string, unknown>, [DiscriminatedNode]> }
 
-export type DiscriminatorTransformerConfig = {
-    discriminator: Discriminator
-    throwOnUnsupported?: boolean
+export interface DiscriminatorTransformerConfig {
+
+    readonly discriminator: Discriminator
+    readonly throwOnUnsupported?: boolean
+
 }
 
 function maybe<I, O>(value: I | undefined | null, func: (value: I) => O) {
