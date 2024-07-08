@@ -11,7 +11,7 @@ export type UpdateDefault = DefaultValue<InsertQueryNode | UpdateQueryNode>
 
 export interface DefaultsPluginOptions {
 
-    readonly tables: DefaultTable[]
+    readonly tables: readonly DefaultTable[]
     readonly throwOnUnsupported?: boolean | undefined
 
 }

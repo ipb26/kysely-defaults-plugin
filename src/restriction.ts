@@ -2,8 +2,8 @@ import { KyselyPlugin, PluginTransformQueryArgs, PluginTransformResultArgs, Quer
 
 export interface RestrictionPluginOptions {
 
-    readonly allowed?: RootOperationNode["kind"][] | undefined
-    readonly disallowed?: RootOperationNode["kind"][] | undefined
+    readonly allowed?: readonly RootOperationNode["kind"][] | undefined
+    readonly disallowed?: readonly RootOperationNode["kind"][] | undefined
 
 }
 

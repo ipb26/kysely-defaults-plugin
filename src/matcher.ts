@@ -1,15 +1,8 @@
 import { AliasNode, OperationNode, TableNode } from "kysely"
 
 export type TableTest = string | "*" | RegExp | ((table: string, schema?: string) => boolean)
-export type TableTests = TableTest | TableTest[]
+export type TableTests = TableTest | readonly TableTest[]
 export type TableMatchable = { table: string, schema?: string }
-
-/*
-export type Pointer = {
-    underlying: TableNode
-    alias: TableNode
-}
-*/
 
 export class TableMatcher {
 
