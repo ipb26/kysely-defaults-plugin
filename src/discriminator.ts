@@ -1,4 +1,4 @@
-import { AndNode, BinaryOperationNode, ColumnNode, InsertQueryNode, JoinNode, KyselyPlugin, OperationNode, OperationNodeTransformer, OperatorNode, PluginTransformQueryArgs, PluginTransformResultArgs, ReferenceNode, SelectQueryNode, TableNode, UpdateQueryNode, ValueNode, WhereNode } from "kysely"
+import { AndNode, BinaryOperationNode, ColumnNode, InsertQueryNode, JoinNode, KyselyPlugin, OnNode, OperationNode, OperationNodeTransformer, OperatorNode, PluginTransformQueryArgs, PluginTransformResultArgs, ReferenceNode, SelectQueryNode, UpdateQueryNode, ValueNode, WhereNode } from "kysely"
 import { ValueOrFactory, callOrGet } from "value-or-factory"
 import { TableMatcher, TableTests } from "./matcher"
 
@@ -66,7 +66,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
         }
         return filtered.reduce((prev, current) => AndNode.create(prev, current))
     }
-    private conditions(table: TableNode, node: DiscriminatedNode) {
+    private conditions(table: OperationNode, node: DiscriminatedNode) {
         return Object.entries(callOrGet(this.config.discriminator.columns, node)).map(([column, value]) => {
             //TODO referencenode is backwards?
             // @ts-ignore
@@ -115,6 +115,26 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
         const conditions = this.combineConditions(node.where?.where, ...filters)
         return {
             ...node,
+            joins: node.joins?.map(join => {
+                console.log("TODO", join.table)
+                const table = this.matcher.testNode(join.table)
+                if (table === undefined) {
+                    return join
+                }
+                return {
+                    ...join,
+                    on: (() => {
+                        const conditions = this.combineConditions(...this.conditions(table, node))
+                        if (conditions === undefined) {
+                            return join.on
+                        }
+                        if (join.on === undefined) {
+                            return OnNode.create(conditions)
+                        }
+                        return OnNode.create(AndNode.create(join.on.on, conditions))
+                    })()
+                }
+            }),
             where: maybe(conditions, WhereNode.create)
         }
     }

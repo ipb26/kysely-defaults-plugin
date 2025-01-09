@@ -18,7 +18,7 @@ export class TableMatcher {
                 alias: node
             }
         }
-        else if (AliasNode.is(node) && TableNode.is(node.node) && TableNode.is(node.alias)) {
+        else if (AliasNode.is(node) && TableNode.is(node.node)/* && TableNode.is(node.alias)*/) {
             return {
                 underlying: node.node,
                 alias: node.alias,
