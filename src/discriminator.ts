@@ -116,7 +116,6 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
         return {
             ...node,
             joins: node.joins?.map(join => {
-                console.log("TODO", join.table)
                 const table = this.matcher.testNode(join.table)
                 if (table === undefined) {
                     return join
