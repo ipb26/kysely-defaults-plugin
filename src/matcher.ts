@@ -9,9 +9,7 @@ export class TableMatcher {
     constructor(private readonly matchers: TableTests) {
     }
 
-    //TODO hide
     table(node: OperationNode) {
-        //ReferenceNode.create()
         if (TableNode.is(node)) {
             return {
                 underlying: node,

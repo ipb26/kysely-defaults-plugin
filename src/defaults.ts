@@ -50,11 +50,11 @@ export interface DefaultsTransformerOptions {
 
 export class DefaultsTransformer extends OperationNodeTransformer {
 
-    readonly tableMatcher
+    readonly matcher
 
     constructor(private readonly options: DefaultsTransformerOptions) {
         super()
-        this.tableMatcher = new TableMatcher(options.table.table)
+        this.matcher = new TableMatcher(options.table.table)
     }
 
     private valueToNode<Q>(factory: DefaultValue<Q>, node: Q) {
@@ -97,14 +97,14 @@ export class DefaultsTransformer extends OperationNodeTransformer {
 
     protected override transformUpdateQuery(originalNode: UpdateQueryNode): UpdateQueryNode {
         const node = super.transformUpdateQuery(originalNode)
-        const table = this.tableMatcher.table(node.table)
+        const table = this.matcher.table(node.table)
         if (table === undefined) {
             if (this.options.throwOnUnsupported ?? true) {
                 throw new Error("This type of update query is not supported by the DiscriminatorPlugin.")
             }
             return node
         }
-        if (!this.tableMatcher.test(table.underlying)) {
+        if (!this.matcher.test(table.underlying)) {
             return node
         }
         const defaults = this.updateValues(node, this.options.table.defaults)
@@ -124,7 +124,7 @@ export class DefaultsTransformer extends OperationNodeTransformer {
 
     protected override transformInsertQuery(originalNode: InsertQueryNode): InsertQueryNode {
         const node = super.transformInsertQuery(originalNode)
-        if (!this.tableMatcher.test(node.into)) {
+        if (!this.matcher.test(node.into)) {
             return node
         }
         if (node.values === undefined) {
