@@ -48,7 +48,7 @@ export class DiscriminatorTransformer extends OperationNodeTransformer {
      */
     private conditions(table: OperationNode, node: DiscriminatedNode) {
         return Object.entries(callOrGet(this.config.discriminator.columns, node)).map(([column, value]) => {
-            //TODO referencenode is backwards?
+            // TODO typing?
             // @ts-ignore
             return BinaryOperationNode.create(ReferenceNode.create(ColumnNode.create(column), table),
                 OperatorNode.create("="),
